@@ -1,31 +1,43 @@
 'use client';
-// BarChartComponent.js
-import React from 'react';
+// LineCompareChartComponent.js
+import React, { useRef, useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 
-/**
- * TO DO: Account for two variables with a different number of data points.
- *        Account for data that doesn't start in 2017
- */
-
-/**
- * @param variable1 - string containing the first variable recorded in the graph
- * @param values1 -   an array of values measured each year for the first variable
- * @param variable2 - string containing the second variable recorded in the graph
- * @param values2 -   an array of values measured each year for the second variable
- * @param style -    a struct containing format options - height and width
- *                   must be defined as numbers.
- */
-const LineCompareChart = ({ variable1, values1, variable2, values2, style }) => {
-  // ensures args are arrays
+const LineCompareChart = ({ variable1, values1, variable2, values2, minYear }) => {
   if (!Array.isArray(values1) || values1.length === 0 || !Array.isArray(values2) || values2.length === 0) {
     return <div>ERROR: chart arg must be an array</div>;
   }
 
-  // used for scaling the y axis
-  const min = Math.min(...values1, ...values2);
-  const max = Math.max(...values1, ...values2);
-  const buffer = (max-min)*0.05;
+  const chartContainerRef = useRef(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  const formatNumber = (num) => {
+    if (num >= 1000000000) {
+      return (num / 1000000000).toFixed(1) + 'B';
+    }
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num;
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        setDimensions({
+          width: chartContainerRef.current.offsetWidth,
+          height: chartContainerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const option = {
     legend: {
@@ -43,7 +55,7 @@ const LineCompareChart = ({ variable1, values1, variable2, values2, style }) => 
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:${item.color};margin-right:5px;"></span>
                 ${item.seriesName}: 
               </span>
-              <span style="text-align: right;">&nbsp;$${item.value}</span>
+              <span style="text-align: right;">&nbsp;$${formatNumber(item.value)}</span>
             </div>`;
         });
         tooltipContent += `</div>`;
@@ -51,15 +63,13 @@ const LineCompareChart = ({ variable1, values1, variable2, values2, style }) => 
       }
     },
     grid: {
-      left: 0.045*style.width,
-      right: 0.045*style.width,
       top: 0,
       bottom: 0,
       containLabel: true
     },
     xAxis: {
       type: 'category',
-      data: Array.from({ length: values1.length }, (_, index) => index + 2017),
+      data: Array.from({ length: values1.length }, (_, index) => index + parseInt(minYear)),
       boundaryGap: false,
       handle: {
         show: true,
@@ -69,7 +79,7 @@ const LineCompareChart = ({ variable1, values1, variable2, values2, style }) => 
         alignWithLabel: true
       },
       axisLabel: {
-        fontSize: Math.round(0.036*style.width),
+        fontSize: Math.round(0.036 * dimensions.width),
         fontWeight: 'bold'
       }
     },
@@ -143,7 +153,9 @@ const LineCompareChart = ({ variable1, values1, variable2, values2, style }) => 
   };
 
   return (
-    <ReactECharts option={option} style={style} />
+    <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }}>
+      <ReactECharts option={option} />
+    </div>
   );
 };
 

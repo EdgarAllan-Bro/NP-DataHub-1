@@ -2,10 +2,11 @@
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import DashboardNavbar from "../components/dashboardNav";
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Autosuggest from 'react-autosuggest';
 import cities from "../components/cities";
 import ntee_codes from "../components/ntee";
+import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
     const [state, setState] = useState('');
@@ -14,37 +15,128 @@ export default function Dashboard() {
     const [searchResults, setSearchResults] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
     const [NteeSuggestions, setNteeSuggestions] = useState([]);
+    const [allResults, setAllResults] = useState([]); // Store all results
+    const [currentPage, setCurrentPage] = useState(1); // Track current page
+    const [itemsPerPage] = useState(10); // Set items per page
+    const [hasSearched, setHasSearched] = useState(false);
+    
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentResults = allResults.slice(indexOfFirstItem, indexOfLastItem);
+    const router = useRouter();
+    let mostRecentYear = 0
 
-
-    const handleSearch = () => {
-      // Implement your search logic here
-      console.log('Searching with:', { state, city, nteeCode});
-  
-      // Mock search results data
-      const results = [
-        {
-          nonprofitName: 'ALBANY MEDICAL NETWORK',
-          address: '123 Main Street',
-          city: 'Albany',
-          state: 'NY',
-          zip: '12345',
-          annualRev: '$17,564,456.12',
-          annualExpenses: '$16,567,435.21'
-        },
-        {
-            nonprofitName: 'ALBANY MEDICAL NETWORK',
-            address: '123 Main Street',
-            city: 'Albany',
-            state: 'NY',
-            zip: '12345',
-            annualRev: '$17,564,456.12',
-            annualExpenses: '$16,567,435.21'
+    const formatNumber = (num) => {
+        if (num >= 1000000000) {
+          return (num / 1000000000).toFixed(1) + 'B';
         }
-        // Add more results as needed
-      ];
-  
-      setSearchResults(results);
+        if (num >= 1000000) {
+          return (num / 1000000).toFixed(1) + 'M';
+        }
+        if (num >= 1000) {
+          return (num / 1000).toFixed(1) + 'K';
+        }
+        return num;
+      };
+
+
+    const handleNonprofitClick = (id) => {
+        router.push(`/nonprofit/${id}`);
     };
+
+
+    const capitalizeFirstLetter = (str) => {
+        return str.split(' ')
+            .map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            )
+            .join(' ');
+    };
+
+
+    const searchResultsRef = useRef(null); // Create a ref for the search results div
+
+    const handleSearch = async () => {
+        try {
+          const response = await fetch(`/api/items?state=${state}&city=${city}&nteeCode=${nteeCode}`);
+          const data = await response.json();
+          if (data.success) {
+            // Process data to include most recent year's revenue and expenses
+            const processedData = data.data.map(item => {
+              const years = Object.keys(item).filter(year => !isNaN(year)).sort();
+              mostRecentYear = years[years.length - 1];
+              return {
+                ...item,
+                annualRevenue: mostRecentYear ? item[mostRecentYear]['Total Revenue'] : 'N/A',
+                annualExpenses: mostRecentYear ? item[mostRecentYear]['Total Expenses'] : 'N/A'
+              };
+            });
+            setAllResults(processedData);
+            setCurrentPage(1);
+            setHasSearched(true);
+
+            // Scroll to the search results div
+            setTimeout(() => {
+              if (searchResultsRef.current) {
+                searchResultsRef.current.scrollIntoView({ behavior: 'smooth' });
+              }
+            }, 2);
+          } else {
+            console.error('Failed to fetch items:', data.error);
+          }
+        } catch (error) {
+          console.error('Failed to fetch items:', error);
+        }
+      };
+
+    const handlePageChange = (pageNumber) => {
+        setCurrentPage(pageNumber);
+    };
+    // Render pagination controls
+    const renderPaginationControls = () => {
+        const pageNumbers = [];
+        const totalPages = Math.ceil(allResults.length / itemsPerPage);
+        const maxPageDisplay = 5;
+        const startPage = Math.max(1, currentPage - Math.floor(maxPageDisplay / 2));
+        const endPage = Math.min(totalPages, startPage + maxPageDisplay - 1);
+    
+        for (let i = startPage; i <= endPage; i++) {
+            pageNumbers.push(i);
+        }
+    
+        return (
+            <div className="flex justify-center mt-4">
+                {startPage > 1 && (
+                    <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        className="px-3 py-1 mx-1 rounded bg-[#171821] text-white"
+                    >
+                        &lt;
+                    </button>
+                )}
+                {pageNumbers.map(number => (
+                    <button
+                        key={number}
+                        onClick={() => handlePageChange(number)}
+                        className={`px-3 py-1 mx-1 rounded ${currentPage === number ? 'bg-[#A9DFD8] text-black' : 'bg-[#171821] text-white'}`}
+                    >
+                        {number}
+                    </button>
+                ))}
+                {endPage < totalPages && (
+                    <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        className="px-3 py-1 mx-1 rounded bg-[#171821] text-white"
+                    >
+                        &gt;
+                    </button>
+                )}
+            </div>
+        );
+    };
+    
+    console.log("searchResults:", searchResults);
+
 
     const getNteeSuggestions = value => {
         const inputValue = value.trim().toLowerCase();
@@ -413,30 +505,52 @@ export default function Dashboard() {
                                 SEARCH
                             </button>
                             </div>
-                            {searchResults && (
-                                <div className="mt-10 bg-[#21222D] p-4 rounded-lg shadow-md mx-10 w-screen max-w-max">
-                                <div className="grid grid-cols-7 gap-4 mb-4 font-semibold text-sm text-center">
-                                    <div>NONPROFIT NAME</div>
-                                    <div>ADDRESS</div>
-                                    <div>CITY</div>
-                                    <div>STATE</div>
-                                    <div>ZIP</div>
-                                    <div>ANNUAL REV.</div>
-                                    <div>ANNUAL EXPENSES</div>
-                                </div>
-                                {searchResults.map((result, index) => (
-                                    <div key={index} className="grid grid-cols-7 gap-4 text-sm mb-2 text-center">
-                                    <div><a href="nonprofit">{result.nonprofitName}</a></div>
-                                    <div>{result.address}</div>
-                                    <div>{result.city}</div>
-                                    <div>{result.state}</div>
-                                    <div>{result.zip}</div>
-                                    <div>{result.annualRev}</div>
-                                    <div>{result.annualExpenses}</div>
+                            {hasSearched && (
+                                <div ref={searchResultsRef} className="flex-col mt-10 bg-[#21222D] p-4 rounded-lg shadow-md mx-40 w-screen max-w-7xl">
+                                    {currentResults.length > 0 ? (
+                                        <>
+                                            <div className="grid grid-cols-7 gap-4 mb-4 font-semibold text-sm text-center">
+                                                <div>NONPROFIT NAME</div>
+                                                <div>ADDRESS</div>
+                                                <div>CITY</div>
+                                                <div>STATE</div>
+                                                <div>ZIP</div>
+                                                <div>LAST RECORDED REV.</div>
+                                                <div>LAST RECORDED EXP.</div>
+                                            </div>
+                                            <div className="flex flex-col justify-between overflow-x-auto" style={{ maxHeight: '400px' }}>
+                                                <div>
+                                                    {currentResults.map((result, index) => (
+                                                        <div key={index} className="grid grid-cols-7 gap-4 text-sm mb-2 text-center">
+                                                            <div>
+                                                                <a 
+                                                                    href="#"
+                                                                    onClick={() => handleNonprofitClick(result._id)}
+                                                                    className="text-[#A9DFD8] hover:underline font-semibold"
+                                                                >
+                                                                    {capitalizeFirstLetter(result.Name)}
+                                                                </a>
+                                                            </div>
+                                                            <div>123 some street </div>
+                                                            <div>{capitalizeFirstLetter(result.City)}</div>
+                                                            <div>{result.State}</div>
+                                                            <div>{result.Zipcode}</div>
+                                                            <div>{formatNumber(result.annualRevenue)}</div>
+                                                            <div>{formatNumber(result.annualExpenses)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center text-white text-lg flex items-center justify-center">No search results found.</div>
+                                    )}
+                                    <div className="flex justify-center mt-4">
+                                        {renderPaginationControls()}
                                     </div>
-                                ))}
                                 </div>
                             )}
+
                         </div>
                         </div>
 
